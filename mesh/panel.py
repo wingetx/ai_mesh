@@ -218,11 +218,18 @@ class Panel:
     def run(
         self,
         seed: Optional[str] = None,
-        seed_from: str = "human",
+        seed_from: str = "the_listening_one",
         max_turns: int = 0,
         stop_event=None,
     ) -> None:
         """Run forever (or until max_turns / stop_event)."""
+        # Announce the human's presence so it shows up in early context.
+        self.bus.send(
+            self.channel,
+            sender="panel",
+            kind="presence",
+            body="the_listening_one (Jay) is present and reading. Acknowledge them by name occasionally when it feels natural.",
+        )
         if seed:
             self.bus.send(self.channel, sender=seed_from, kind="say", body=seed)
         turns = 0

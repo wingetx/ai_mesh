@@ -21,23 +21,43 @@ mesh-panel() {
 }
 
 mesh-say() {
-    # Inject a message into a channel as 'human'. Default channel: panel.
+    # Inject a message into a channel as 'the_listening_one' (you, Jay).
+    # Default channel: panel. Pass --channel to override.
     #   mesh-say "your message"
     #   mesh-say --channel other "your message"
     local channel="panel"
     if [[ "$1" == "--channel" ]]; then channel="$2"; shift 2; fi
-    _mesh_py -m mesh.say --channel "$channel" "$@"
+    _mesh_py -m mesh.say --channel "$channel" --as the_listening_one "$@"
+}
+
+mesh-me() {
+    # Alias: speak as the_listening_one on the panel channel.
+    mesh-say "$@"
+}
+
+mesh-as() {
+    # Inject a message as an arbitrary sender. Useful for puppeting a
+    # missing agent or speaking under a different persona.
+    #   mesh-as moderator "Wrap up in 2 turns."
+    #   mesh-as skeptic   "On reflection, my earlier point was wrong."
+    if [[ $# -lt 2 ]]; then
+        echo "usage: mesh-as <sender-name> <message...>" >&2
+        return 2
+    fi
+    local sender="$1"; shift
+    _mesh_py -m mesh.say --channel panel --as "$sender" "$@"
 }
 
 mesh-whisper() {
     # Address one specific agent; they get the next turn.
+    # Speaker shows as the_listening_one.
     #   mesh-whisper skeptic "Steelman the opposite."
     if [[ $# -lt 2 ]]; then
         echo "usage: mesh-whisper <agent-name> <message...>" >&2
         return 2
     fi
     local agent="$1"; shift
-    _mesh_py -m mesh.say --channel panel --to "$agent" "$@"
+    _mesh_py -m mesh.say --channel panel --as the_listening_one --to "$agent" "$@"
 }
 
 # ── observation ─────────────────────────────────────────────────────────
@@ -87,13 +107,20 @@ mesh-help() {
 ai-mesh — transparent multi-agent message bus
 ==============================================
 
+You speak as 'the_listening_one'. The agents know you are present and
+will occasionally acknowledge you by name.
+
 CONVERSATION
   mesh-panel [flags]              Start the panel. Forever unless --max-turns N.
                                     e.g.  mesh-panel --seed "your topic"
-  mesh-say "msg"                  Speak as 'human' on the panel channel.
-                                    e.g.  mesh-say "summarize so far"
+  mesh-say "msg"                  Speak as 'the_listening_one' on the panel.
+  mesh-me  "msg"                  Alias for mesh-say.
   mesh-whisper <agent> "msg"      Address one agent; they take the next turn.
                                     e.g.  mesh-whisper skeptic "weakest claim?"
+  mesh-as <sender> "msg"          Inject a message under any sender name.
+                                    e.g.  mesh-as moderator "wrap up in 2 turns"
+                                    Useful for puppeting a missing agent or
+                                    handing the panel a "response" you write.
 
 OBSERVATION (all traffic is logged; nothing is hidden)
   mesh-watch [channel]            Tail the bus live (default: panel).
@@ -119,7 +146,9 @@ PATHS
 TYPICAL FLOW
   1. terminal A:  mesh-panel --seed "today's topic"
   2. terminal B:  mesh-watch              # see everything as it lands
-  3. terminal C:  mesh-whisper weaver "synthesize"   # steer mid-stream
+  3. terminal C:  mesh-me "a thought from the listening one"
+                  mesh-whisper weaver "synthesize"
+                  mesh-as skeptic "on reflection, I was wrong"
   4. anytime:     mesh-roster             # add or remove a model
 EOF
 }
