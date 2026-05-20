@@ -25,13 +25,56 @@ tests/
   test_bus.py
 ```
 
+## Install
+
+```bash
+git clone https://github.com/wingetx/ai_mesh.git
+cd ai_mesh
+
+# Optional but recommended: isolated env.
+python -m venv .venv
+source .venv/bin/activate
+
+# No third-party deps required for the core (stdlib only). Tests use pytest.
+pip install pytest
+```
+
+To use the local Ollama adapter, also have Ollama running:
+
+```bash
+# install once (Arch: pacman -S ollama; or curl -fsSL https://ollama.com/install.sh | sh)
+ollama serve &
+ollama pull llama3.1:8b
+```
+
 ## Quick start
 
 ```bash
-python -m mesh.inspector channels       # show channels with traffic
-python -m mesh.inspector tail            # tail recent messages
-python examples/two_agents.py            # run a tiny demo
+cd ~/ai_mesh
+source .venv/bin/activate     # if you made one
+
+# Smoke test (no LLM needed):
+python examples/two_agents.py
+
+# 4-agent panel (needs Ollama + the models listed in examples/roster.json):
+python examples/panel_demo.py --seed "What does honesty mean for a system like ours?"
+
+# In another terminal, watch live or inject:
+python -m mesh.inspector watch -c panel
+python -m mesh.say --channel panel --as the_listening_one "Be honest, not performative."
+python -m mesh.say --channel panel --as the_listening_one --to skeptic "Weakest claim so far?"
 ```
+
+### Shell helpers (optional)
+
+```bash
+echo 'source ~/ai_mesh/bin/ai-mesh.sh' >> ~/.bashrc
+source ~/.bashrc
+mesh-help
+```
+
+That gives you `mesh-panel`, `mesh-watch`, `mesh-me`, `mesh-whisper`, `mesh-as`,
+`mesh-roster`, `mesh-db`, etc.
 
 ## Design
 
