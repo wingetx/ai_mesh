@@ -29,7 +29,8 @@ def _fmt(env) -> str:
     if len(body_text) > 200:
         body_text = body_text[:197] + "..."
     reply = f" ↪ {env.in_reply_to}" if env.in_reply_to else ""
-    return f"#{env.id:>5}  {ts}  {env.channel:>14}  {env.sender:>10}  [{env.kind}]{reply}  {body_text}"
+    addressed = f" →{env.to}" if env.to else ""
+    return f"#{env.id:>5}  {ts}  {env.channel:>14}  {env.sender:>10}{addressed}  [{env.kind}]{reply}  {body_text}"
 
 
 def main(argv=None) -> int:

@@ -50,6 +50,10 @@ class OllamaAgent(Agent):
 
     def on_message(self, env: Envelope) -> None:
         user_text = env.body if isinstance(env.body, str) else json.dumps(env.body, default=str)
+        # If this message was addressed to me specifically, flag that to the
+        # model so it knows it's a direct ask.
+        if env.to == self.name:
+            user_text = f"(addressed to you) {user_text}"
 
         msgs: list[dict] = []
         if self._system:

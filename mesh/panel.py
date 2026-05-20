@@ -150,30 +150,61 @@ class Panel:
         tail = self.bus.tail(n=1, channel=self.channel)
         return tail[-1] if tail else None
 
-    def _pick_next_speaker(self) -> Optional[str]:
+    def _pending_whisper(self) -> tuple[Optional[str], Optional[Envelope]]:
+        """Return (agent_name, envelope) for an unanswered direct address.
+
+        Scans the recent tail for the newest message whose `to` field names
+        a current panelist who has not yet spoken since being addressed.
+        """
+        recent = self.bus.tail(n=20, channel=self.channel)
+        # Walk newest-first.
+        for env in reversed(recent):
+            if not env.to or env.to not in self._agents:
+                continue
+            target = env.to
+            # Has `target` spoken AFTER this message?
+            answered = any(
+                later.sender == target and later.id is not None
+                and env.id is not None and later.id > env.id
+                for later in recent
+            )
+            if not answered:
+                return target, env
+        return None, None
+
+    def _pick_next_speaker(self) -> tuple[Optional[str], Optional[Envelope]]:
+        """Return (speaker, message_to_hand_them).
+
+        If a whisper is pending, the addressee speaks next and is given the
+        whisper itself. Otherwise round-robin, given the most recent message.
+        """
         if not self._order:
-            return None
+            return None, None
+        whispered, whisper_env = self._pending_whisper()
+        if whispered is not None:
+            try:
+                idx = self._order.index(whispered)
+                self._next_idx = (idx + 1) % len(self._order)
+            except ValueError:
+                pass
+            return whispered, whisper_env
         last = self._last_message()
-        # Skip whoever spoke last so they don't reply to themselves.
         for _ in range(len(self._order)):
             name = self._order[self._next_idx % len(self._order)]
             self._next_idx = (self._next_idx + 1) % len(self._order)
             if last is None or name != last.sender:
-                return name
-        return None
+                return name, last
+        return None, None
 
     def step(self) -> Optional[Envelope]:
         """Run one turn: reload roster, pick next speaker, post their reply."""
         self._reload_roster()
-        speaker = self._pick_next_speaker()
-        if speaker is None:
-            return None
-        last = self._last_message()
-        if last is None:
+        speaker, message = self._pick_next_speaker()
+        if speaker is None or message is None:
             return None
         agent = self._agents[speaker]
         try:
-            agent.on_message(last)
+            agent.on_message(message)
         except Exception:
             log.exception("agent %s failed on turn", speaker)
             self.bus.send(

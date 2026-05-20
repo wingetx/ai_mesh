@@ -40,6 +40,7 @@ class Envelope:
     sender: str
     kind: str  # free-form: "say", "ask", "answer", "tool_result", ...
     body: Any  # JSON-serializable
+    to: Optional[str] = None  # if set, addresses one specific agent
     in_reply_to: Optional[str] = None
     msg_uid: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
@@ -59,6 +60,7 @@ class Bus:
         sender       TEXT    NOT NULL,
         kind         TEXT    NOT NULL,
         body         TEXT    NOT NULL,
+        recipient    TEXT,
         in_reply_to  TEXT,
         msg_uid      TEXT    NOT NULL UNIQUE
     );
@@ -87,6 +89,10 @@ class Bus:
     def _init_db(self) -> None:
         with self._connect() as conn:
             conn.executescript(self.SCHEMA)
+            # Lightweight migration: add `recipient` column to older DBs.
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(messages)")}
+            if "recipient" not in cols:
+                conn.execute("ALTER TABLE messages ADD COLUMN recipient TEXT")
 
     # ── producer ────────────────────────────────────────────────────────
     def send(
@@ -95,6 +101,7 @@ class Bus:
         sender: str,
         body: Any,
         kind: str = "say",
+        to: Optional[str] = None,
         in_reply_to: Optional[str] = None,
     ) -> Envelope:
         """Publish a message. Returns the envelope with id and msg_uid filled."""
@@ -105,20 +112,22 @@ class Bus:
             sender=sender,
             kind=kind,
             body=body,
+            to=to,
             in_reply_to=in_reply_to,
         )
         payload = json.dumps(env.body, ensure_ascii=False, default=str)
         with self._connect() as conn:
             cur = conn.execute(
                 "INSERT INTO messages "
-                "(ts, channel, sender, kind, body, in_reply_to, msg_uid) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "(ts, channel, sender, kind, body, recipient, in_reply_to, msg_uid) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     env.ts,
                     env.channel,
                     env.sender,
                     env.kind,
                     payload,
+                    env.to,
                     env.in_reply_to,
                     env.msg_uid,
                 ),
@@ -180,6 +189,11 @@ class Bus:
             body = json.loads(row["body"])
         except (TypeError, ValueError):
             body = row["body"]
+        # Older rows may not have the recipient column populated.
+        try:
+            recipient = row["recipient"]
+        except (IndexError, KeyError):
+            recipient = None
         return Envelope(
             id=int(row["id"]),
             ts=float(row["ts"]),
@@ -187,6 +201,7 @@ class Bus:
             sender=row["sender"],
             kind=row["kind"],
             body=body,
+            to=recipient,
             in_reply_to=row["in_reply_to"],
             msg_uid=row["msg_uid"],
         )
